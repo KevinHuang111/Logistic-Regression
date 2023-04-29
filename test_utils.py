@@ -1,9 +1,60 @@
 import numpy as np
+from termcolor import colored
+
+from tensorflow.keras.layers import Input
+from tensorflow.keras.layers import Conv2D
+from tensorflow.keras.layers import MaxPooling2D
+from tensorflow.keras.layers import Dropout 
+from tensorflow.keras.layers import Conv2DTranspose
+from tensorflow.keras.layers import concatenate
+from tensorflow.keras.layers import ZeroPadding2D
+from tensorflow.keras.layers import Dense
+
+
+# Compare the two inputs
+def comparator(learner, instructor):
+    if learner == instructor:
+        for a, b in zip(learner, instructor):
+            if tuple(a) != tuple(b):
+                print(colored("Test failed", attrs=['bold']),
+                      "\n Expected value \n\n", colored(f"{b}", "green"), 
+                      "\n\n does not match the input value: \n\n", 
+                      colored(f"{a}", "red"))
+                raise AssertionError("Error in test") 
+        print(colored("All tests passed!", "green"))
+        
+    else:
+        print(colored("Test failed. Your output is not as expected output.", "red"))
+
+# extracts the description of a given model
+def summary(model):
+    model.compile(optimizer='adam',
+                  loss='categorical_crossentropy',
+                  metrics=['accuracy'])
+    result = []
+    for layer in model.layers:
+        descriptors = [layer.__class__.__name__, layer.output_shape, layer.count_params()]
+        if (type(layer) == Conv2D):
+            descriptors.append(layer.padding)
+            descriptors.append(layer.activation.__name__)
+            descriptors.append(layer.kernel_initializer.__class__.__name__)
+        if (type(layer) == MaxPooling2D):
+            descriptors.append(layer.pool_size)
+            descriptors.append(layer.strides)
+            descriptors.append(layer.padding)
+        if (type(layer) == Dropout):
+            descriptors.append(layer.rate)
+        if (type(layer) == ZeroPadding2D):
+            descriptors.append(layer.padding)
+        if (type(layer) == Dense):
+            descriptors.append(layer.activation.__name__)
+        result.append(descriptors)
+    return result
 
 def datatype_check(expected_output, target_output, error):
     success = 0
     if isinstance(target_output, dict):
-        for key in expected_output.keys():
+        for key in target_output.keys():
             try:
                 success += datatype_check(expected_output[key], 
                                          target_output[key], error)
@@ -15,12 +66,12 @@ def datatype_check(expected_output, target_output, error):
         else:
             return 0
     elif isinstance(target_output, tuple) or isinstance(target_output, list):
-        for i in range(len(expected_output)):
+        for i in range(len(target_output)):
             try: 
                 success += datatype_check(expected_output[i], 
                                          target_output[i], error)
             except:
-                print("Error: {} in variable {}. Got type: {}  but expected type {}".format(error,
+                print("Error: {} in variable {}, expected type: {}  but expected type {}".format(error,
                                                                           i, type(target_output[i]), type(expected_output[i])))
         if success == len(target_output):
             return 1
@@ -33,8 +84,8 @@ def datatype_check(expected_output, target_output, error):
             
 def equation_output_check(expected_output, target_output, error):
     success = 0
-    if isinstance(expected_output, dict):
-        for key in expected_output.keys():
+    if isinstance(target_output, dict):
+        for key in target_output.keys():
             try:
                 success += equation_output_check(expected_output[key], 
                                          target_output[key], error)
@@ -45,10 +96,42 @@ def equation_output_check(expected_output, target_output, error):
             return 1
         else:
             return 0
-    elif isinstance(expected_output, tuple) or isinstance(expected_output, list):
-        for i in range(len(expected_output)):
+    elif isinstance(target_output, tuple) or isinstance(target_output, list):
+        for i in range(len(target_output)):
             try: 
                 success += equation_output_check(expected_output[i], 
+                                         target_output[i], error)
+            except:
+                print("Error: {} for variable in position {}.".format(error, i))
+        if success == len(target_output):
+            return 1
+        else:
+            return 0
+                
+    else:
+        if hasattr(target_output, 'shape'):
+            np.testing.assert_array_almost_equal(target_output, expected_output)
+        else:
+            assert target_output == expected_output
+        return 1
+    
+def shape_check(expected_output, target_output, error):
+    success = 0
+    if isinstance(target_output, dict):
+        for key in target_output.keys():
+            try:
+                success += shape_check(expected_output[key], 
+                                         target_output[key], error)
+            except:
+                print("Error: {} for variable {}.".format(error, key))
+        if success == len(target_output.keys()):
+            return 1
+        else:
+            return 0
+    elif isinstance(target_output, tuple) or isinstance(target_output, list):
+        for i in range(len(target_output)):
+            try: 
+                success += shape_check(expected_output[i], 
                                          target_output[i], error)
             except:
                 print("Error: {} for variable {}.".format(error, i))
@@ -58,40 +141,7 @@ def equation_output_check(expected_output, target_output, error):
             return 0
                 
     else:
-        if hasattr(expected_output, 'shape'):
-            #np.allclose(target_output, expected_output)
-            np.testing.assert_array_almost_equal(target_output, expected_output)
-        else:
-            assert target_output == expected_output
-        return 1
-    
-def shape_check(expected_output, target_output, error):
-    success = 0
-    if isinstance(expected_output, dict):
-        for key in expected_output.keys():
-            try:
-                success += shape_check(expected_output[key], 
-                                         target_output[key], error)
-            except:
-                print("Error: {} for variable {}.".format(error, key))
-        if success == len(expected_output.keys()):
-            return 1
-        else:
-            return 0
-    elif isinstance(expected_output, tuple) or isinstance(expected_output, list):
-        for i in range(len(expected_output)):
-            try: 
-                success += shape_check(expected_output[i], 
-                                         target_output[i], error)
-            except:
-                print("Error: {} for variable {}.".format(error, i))
-        if success == len(expected_output):
-            return 1
-        else:
-            return 0
-                
-    else:
-        if hasattr(expected_output, 'shape'):
+        if hasattr(target_output, 'shape'):
             assert target_output.shape == expected_output.shape
         return 1
                 
@@ -140,4 +190,6 @@ def multiple_test(test_cases, target):
         print('\033[92m', success," Tests passed")
         print('\033[91m', len(test_cases) - success, " Tests failed")
         raise AssertionError("Not all tests were passed for {}. Check your equations and avoid using global variables inside the function.".format(target.__name__))
+        
+        
         
